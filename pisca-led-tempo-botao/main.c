@@ -11,12 +11,87 @@
 #include "hardware/timer.h"
 #include "hardware/irq.h"
 
+const int LED_PIN_Y = 18;
+
+const int BTN_PIN_G = 17;
+
+volatile int btn_f = 0;
+volatile int g_timer_g = 0;
+volatile int g_fired_g = 0;
+
+void btn_callback(uint gpio, uint32_t events) {
+    if (events == 0x4) {  // fall edge
+        btn_f = 1;
+    } else if (events == 0x8) { 
+        btn_f = 2; 
+         // rise edge
+        
+    }
+}
+
+bool timer_g_callback(repeating_timer_t *rt) {
+    g_timer_g = 1;
+    return true;  // keep repeating
+}
+
+int64_t alarm_g_callback(alarm_id_t id, void *user_data) {
+    g_fired_g = 1;
+    return 0;
+}
+
+
 
 int main() {
     stdio_init_all();
+    gpio_init(BTN_PIN_G);
+    gpio_set_dir(BTN_PIN_G, GPIO_IN);
+    gpio_pull_up(BTN_PIN_G);
+    gpio_set_irq_enabled_with_callback(BTN_PIN_G, 0x4 | 0x8, true, &btn_callback);
+
+    gpio_init(LED_PIN_Y);
+    gpio_set_dir(LED_PIN_Y, GPIO_OUT);
+
+    struct repeating_timer timer;
+    bool timer_ativo = false;
+    uint32_t time_start = 0;
+    int led_g =0;
+
+    int alarm_enable_g = 0;
 
 
-    while (true) {
+    while (1) {
+        if (btn_f == 1){
+            btn_f = 0;
+
+            gpio_put(LED_PIN_Y,0);
+            led_g = 0;
+
+            if (timer_ativo){
+                cancel_repeating_timer(&timer);
+                timer_ativo = false;
+            }
+            time_start = to_ms_since_boot(get_absolute_time());
+
+        } else if (btn_f == 2){
+            btn_f = 0;
+
+            uint32_t time_press = to_ms_since_boot(get_absolute_time()) - time_start;
+
+            if (time_press > 0){
+                led_g = 1;
+                gpio_put(LED_PIN_Y,1);
+                add_repeating_timer_ms(time_press, timer_g_callback, NULL, &timer);
+                timer_ativo = true;
+            }
+
+        }
+
+        if (g_timer_g == 1){
+            g_timer_g = 0;
+
+            led_g = !led_g;
+            gpio_put(LED_PIN_Y,led_g);
+        }
 
     }
 
