@@ -11,18 +11,17 @@
 #include "hardware/timer.h"
 #include "hardware/irq.h"
 
-const int LED_PIN_Y = 18;
+const int LED_PIN_Y = 5;
 
-const int BTN_PIN_G = 17;
+const int BTN_PIN_G = 28;
 
 volatile int btn_f = 0;
 volatile int g_timer_g = 0;
-volatile int g_fired_g = 0;
 
 void btn_callback(uint gpio, uint32_t events) {
-    if (events == 0x4) {  // fall edge
+    if (events & 0x4) {  // fall edge
         btn_f = 1;
-    } else if (events == 0x8) { 
+    } else if (events & 0x8) { 
         btn_f = 2; 
          // rise edge
         
@@ -34,10 +33,7 @@ bool timer_g_callback(repeating_timer_t *rt) {
     return true;  // keep repeating
 }
 
-int64_t alarm_g_callback(alarm_id_t id, void *user_data) {
-    g_fired_g = 1;
-    return 0;
-}
+
 
 
 
@@ -55,8 +51,7 @@ int main() {
     bool timer_ativo = false;
     uint32_t time_start = 0;
     int led_g =0;
-
-    int alarm_enable_g = 0;
+    uint32_t time_press = 0;
 
 
     while (1) {
@@ -71,26 +66,38 @@ int main() {
                 timer_ativo = false;
             }
             time_start = to_ms_since_boot(get_absolute_time());
-
+            
         } else if (btn_f == 2){
             btn_f = 0;
 
-            uint32_t time_press = to_ms_since_boot(get_absolute_time()) - time_start;
+            time_press = to_ms_since_boot(get_absolute_time()) - time_start;
+            time_start = to_ms_since_boot(get_absolute_time());
+            add_repeating_timer_ms(500, timer_g_callback, NULL, &timer);
 
-            if (time_press > 0){
-                led_g = 1;
-                gpio_put(LED_PIN_Y,1);
-                add_repeating_timer_ms(time_press, timer_g_callback, NULL, &timer);
-                timer_ativo = true;
-            }
-
+            timer_ativo = true;
         }
 
-        if (g_timer_g == 1){
+        if (g_timer_g){
             g_timer_g = 0;
 
-            led_g = !led_g;
-            gpio_put(LED_PIN_Y,led_g);
+
+            if (timer_ativo){
+                uint32_t agora = to_ms_since_boot(get_absolute_time());
+
+                if (agora - time_start >= time_press){
+                    timer_ativo = false;
+                    led_g = 0;
+                    gpio_put(LED_PIN_Y, led_g);
+                    cancel_repeating_timer(&timer);
+
+                }else{
+                    led_g = !led_g;
+                    gpio_put(LED_PIN_Y,led_g);
+                }
+
+            }
+         
+            
         }
 
     }
